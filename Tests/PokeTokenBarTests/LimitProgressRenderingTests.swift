@@ -143,3 +143,19 @@ final class LimitProgressRenderingTests: XCTestCase {
                        "눈금은 트랙 위아래로 2pt 씩만 물려야 한다 (트랙 \(trackHeight)pt, 눈금 \(markerHeight)pt)")
     }
 }
+
+// 막대 색은 사용자가 정한 경고·위험선을 따른다. 툴팁도 팝오버와 같은 규칙을 쓴다.
+@MainActor
+final class StatusBarTintTests: XCTestCase {
+
+    /// 팝오버 막대는 사용자가 정한 경고·위험선을 따른다. 툴팁 구간이 이 규칙을 덮으면 안 된다.
+    func testPopoverTintStillFollowsThresholds() throws {
+        let suite = "LimitTint-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = UsageStore(providers: [], autoRefresh: false, defaults: defaults)
+        XCTAssertEqual(LimitProgressBar.tint(store.critThreshold, store: store), .red)
+        XCTAssertEqual(LimitProgressBar.tint(store.warnThreshold, store: store), .orange)
+        XCTAssertEqual(LimitProgressBar.tint(store.warnThreshold - 1, store: store), .green)
+    }
+}

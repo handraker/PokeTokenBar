@@ -259,6 +259,14 @@ final class CompanionStore {
     var currentUnownForm: UnownForm? {
         UnownForm.resolved(speciesID: currentSpeciesID ?? 0, form: state.active?.unownForm)
     }
+
+    /// 이름·등급·단계·성격을 한 줄 머리로 묶는다. 화면마다 다시 조립하면 표기가 갈린다.
+    var petHeader: PetHeader {
+        let nature = currentNature.map { " · \($0.name(language))" } ?? ""
+        return PetHeader(name: displayName, rarity: rarity,
+                         rarityText: rarity.map { l.rarityLabel($0) }, isShiny: currentIsShiny,
+                         subtitle: hasActive ? stageText + nature : "")
+    }
     var isFinalStage: Bool {
         guard let a = state.active, let line = currentLine else { return false }
         return line.tree.node(withID: a.currentID)?.children.isEmpty ?? true

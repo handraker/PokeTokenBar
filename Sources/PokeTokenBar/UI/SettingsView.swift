@@ -310,6 +310,30 @@ struct SettingsView: View {
                 }
                 Divider()
                 toggleRow(l.floatingPetBubbleAlertsLabel, $store.floatingPetBubbleAlerts)
+                Divider()
+                groupRow {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(l.jokeBubblesLabel)
+                        Text(l.jokeBubblesHint).font(.caption2).foregroundStyle(.tertiary)
+                    }
+                    Spacer()
+                    Toggle(l.jokeBubblesLabel, isOn: $store.jokeBubbles)
+                        .labelsHidden().toggleStyle(.switch).controlSize(.small)
+                }
+                if store.jokeBubbles {
+                    Divider()
+                    groupRow {
+                        Text(l.jokeIntervalLabel).font(.callout)
+                        Spacer()
+                        TextField(l.jokeIntervalLabel, value: $store.jokeInterval, format: .number)
+                            .labelsHidden().multilineTextAlignment(.trailing)
+                            .frame(width: 56).textFieldStyle(.roundedBorder)
+                        Text(l.secondsUnit).font(.caption).foregroundStyle(.secondary)
+                        Stepper(l.jokeIntervalLabel, value: $store.jokeInterval,
+                                in: UsageStore.jokeIntervalRange, step: 10)
+                            .labelsHidden()
+                    }
+                }
             }
         }
     }

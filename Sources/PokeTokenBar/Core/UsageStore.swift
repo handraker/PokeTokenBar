@@ -66,7 +66,7 @@ final class UsageStore {
 
     // MARK: Bubble Alert State
     /// Transient speech-bubble payload for the floating pet. Cleared after the TTL.
-    private(set) var currentBubbleAlert: LimitAlert?
+    private(set) var currentBubble: BubbleContent?
     private var currentBubbleDate: Date = .distantPast
 
     // MARK: 설정 (UserDefaults)
@@ -159,6 +159,19 @@ final class UsageStore {
     var floatingPetBubbleAlerts: Bool {
         didSet { defaults.set(floatingPetBubbleAlerts, forKey: "floatingPetBubbleAlerts") }
     }
+    /// 성격에 맞는 농담을 말풍선으로 띄울지. 토큰을 쓰는 기능이라 끄면 생성도 멈춘다.
+    var jokeBubbles: Bool {
+        didSet { defaults.set(jokeBubbles, forKey: "jokeBubbles") }
+    }
+    /// 농담 사이의 최소 간격(초). 범위 밖 값은 경계로 되돌린다 — 설정 화면에서 직접 입력받고
+    /// UserDefaults 도 손으로 고칠 수 있어서, 읽는 쪽이 아니라 여기서 한 번에 막는다.
+    var jokeInterval: TimeInterval {
+        didSet {
+            let clamped = Self.clampJokeInterval(jokeInterval)
+            if clamped != jokeInterval { jokeInterval = clamped; return }
+            defaults.set(jokeInterval, forKey: "jokeInterval")
+        }
+    }
     var disableKeychainAccess: Bool {
         didSet {
             defaults.set(disableKeychainAccess, forKey: "disableKeychainAccess")   // 저장 누락이던 기존 버그 — 재시작 후 풀렸음
@@ -179,6 +192,13 @@ final class UsageStore {
                 Task { await refresh() }
             }
         }
+    }
+
+    /// 농담 주기의 허용 범위(초). 끄는 것은 `jokeBubbles` 가 맡으므로 0 은 받지 않는다.
+    static let jokeIntervalRange: ClosedRange<TimeInterval> = 1...3600
+
+    static func clampJokeInterval(_ value: TimeInterval) -> TimeInterval {
+        min(jokeIntervalRange.upperBound, max(jokeIntervalRange.lowerBound, value.rounded()))
     }
 
     static let intervalPresets: [(label: String, value: TimeInterval)] = [
@@ -240,6 +260,8 @@ final class UsageStore {
     private let defaults: UserDefaults
     private var timer: Timer?
     private var networkMonitor: NetworkReachabilityMonitor?
+    private var notificationWatcher: NotificationWatcher?
+    private var recapWatcher: ClaudeRecapWatcher?
     private var pollingSuspended = false   // 디스플레이 꺼짐 동안 폴링 정지 (배터리)
     private var emptyUsageRetryTask: Task<Void, Never>?
     /// 한도 알림 상태(엣지 트리거) — 창 이름 → 이미 알린 최고 tier(0=없음, 1=경고, 2=위험).
@@ -573,6 +595,24 @@ final class UsageStore {
     }
 
     /// Highest official-limit utilization across providers **used today** (compact surfaces only).
+    /// 현재 5시간 세션 사용률. 신형 응답만 오는 계정은 legacy 필드가 비어 `limits[]` 에서 찾는다.
+    var sessionUtilization: Double? {
+        limits?.fiveHour?.utilization ?? limits?.limits?.first { $0.kind == "session" }?.percent
+    }
+
+    /// 주간 전체 한도 사용률. 세션과 같은 이유로 legacy 필드가 비면 `limits[]` 에서 찾는다.
+    var weeklyUtilization: Double? {
+        limits?.sevenDay?.utilization ?? limits?.limits?.first { $0.kind == "weekly_all" }?.percent
+    }
+
+    /// 모델별 주간 한도 사용률. 표시 이름으로 찾아 응답에 모델이 늘거나 이름이 바뀌어도
+    /// 모델별 분기를 만들지 않는다.
+    func weeklyUtilization(forModel name: String) -> Double? {
+        limits?.scopedLimitEntries.first {
+            $0.scope?.model?.displayName?.localizedCaseInsensitiveContains(name) == true
+        }?.percent
+    }
+
     /// Excludes Codex personal/spend limits (dollars). Renamed from `highestBurnPercent` —
     /// `burn` means token rate elsewhere in this codebase.
     var highestLimitUtilization: Double? {
@@ -774,6 +814,9 @@ final class UsageStore {
         limitDisplayMode = LimitDisplayMode(rawValue: d.string(forKey: "limitDisplayMode") ?? "") ?? .used
         menuLimitColorMode = MenuLimitColorMode(rawValue: d.string(forKey: "menuLimitColorMode") ?? "") ?? .gauge
         limitNotifications = d.object(forKey: "limitNotifications") as? Bool ?? true
+        // 초기화 중에는 didSet 이 돌지 않는다. 저장된 값도 여기서 한 번 범위로 되돌린다.
+        jokeBubbles = d.object(forKey: "jokeBubbles") as? Bool ?? true
+        jokeInterval = Self.clampJokeInterval(d.object(forKey: "jokeInterval") as? TimeInterval ?? 120)
         companionNotifications = d.object(forKey: "companionNotifications") as? Bool ?? true
         updateNotificationsEnabled = d.object(forKey: "updateNotificationsEnabled") as? Bool ?? true
         statusChecksEnabled = d.object(forKey: "statusChecksEnabled") as? Bool ?? true
@@ -830,6 +873,22 @@ final class UsageStore {
             }
             net.start()
             self.networkMonitor = net
+
+            // macOS 알림을 pet 말풍선으로. 한도 경고와 같은 게이트·같은 표시 경로를 쓴다.
+            let notifications = NotificationWatcher { [weak self] content in
+                guard let self, self.floatingPetEnabled, self.floatingPetBubbleAlerts else { return }
+                self.showBubble(content)
+            }
+            notifications.start()
+            self.notificationWatcher = notifications
+
+            // Claude Code 가 방금 한 말.
+            let recap = ClaudeRecapWatcher { [weak self] recap in
+                self?.presentIdleBubble(BubbleContent(title: recap.title, body: recap.sentence,
+                                                      palette: .claude))
+            }
+            recap.start()
+            self.recapWatcher = recap
         }
 
         // 알림 권한은 기동 즉시 묻지 않는다 — 앱을 이해하기 전 콜드 프롬프트는 거부율이 높고
@@ -1774,6 +1833,28 @@ final class UsageStore {
         }
     }
 
+    /// 말풍선이 그대로 그리는 표시 문자열. 한도 경고와 외부 알림이 같은 표시 경로를 쓰게 해
+    /// `FloatingPetView` 에 소스별 분기가 생기지 않게 한다.
+    struct BubbleContent: Equatable {
+        let title: String
+        let body: String
+        var isCritical: Bool = false
+        /// 말풍선 색. 알림과 한도 경고는 시스템 색을 쓰고 Claude recap 과 펫의 농담은 제 색을
+        /// 쓴다 — 무엇이 말하고 있는지 글을 읽기 전에 색으로 구분된다.
+        var palette: Palette = .system
+        /// 펫이 말하는 말풍선에만 붙는 머리. 알림·한도·recap 은 nil 이라 제목 한 줄로 그려진다.
+        var header: PetHeader?
+
+        enum Palette { case system, claude, joke, dooray }
+    }
+
+    /// 한도 알림 → 말풍선 문자열(순수 — 표시 문구 선택을 뷰 밖에서 테스트한다).
+    static func bubbleContent(for alert: LimitAlert, l: L) -> BubbleContent {
+        BubbleContent(title: alert.isCritical ? l.notifCritical : l.notifWarning,
+                      body: l.notifBody(alert.window, TokenFormatter.percent(alert.utilization)),
+                      isCritical: alert.isCritical)
+    }
+
     /// 한도 알림 1건의 발화 지시(순수 판정 결과). 부수효과와 분리해 테스트 가능하게.
     struct LimitAlert: Equatable {
         let key: String        // tier 추적·알림 identifier 용 유일 키(창마다 유일, 표시 안 함)
@@ -1847,7 +1928,8 @@ final class UsageStore {
             postLimitNotifications(alerts)
         }
         if floatingPetEnabled, floatingPetBubbleAlerts {
-            showBubble(Self.bubbleAlert(from: alerts))
+            let l = L(localizationLanguage)
+            showBubble(Self.bubbleAlert(from: alerts).map { Self.bubbleContent(for: $0, l: l) })
         }
     }
 
@@ -1933,15 +2015,22 @@ final class UsageStore {
         }
     }
 
-    private func showBubble(_ alert: LimitAlert?) {
-        guard let alert else { return }
+    /// 조용할 때만 띄우는 말풍선(recap·농담). 알림이나 한도 경고가 떠 있으면 건너뛴다 —
+    /// 그쪽이 사용자가 놓치면 안 되는 내용이다.
+    func presentIdleBubble(_ content: BubbleContent) {
+        guard floatingPetEnabled, floatingPetBubbleAlerts, currentBubble == nil else { return }
+        showBubble(content)
+    }
+
+    private func showBubble(_ content: BubbleContent?) {
+        guard let content else { return }
         let now = Date()
-        currentBubbleAlert = alert
+        currentBubble = content
         currentBubbleDate = now
         Task {
             try? await Task.sleep(nanoseconds: UInt64(6 * 1_000_000_000))
             if Self.shouldDismissBubble(shownAt: now, now: Date()), self.currentBubbleDate == now {
-                self.currentBubbleAlert = nil
+                self.currentBubble = nil
             }
         }
     }

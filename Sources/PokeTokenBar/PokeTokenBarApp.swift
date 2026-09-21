@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var companion: CompanionStore!
     private var updater: UpdateChecker!
     private var floatingPet: FloatingPetController!
+    private var jokes: JokeWatcher!
     private let navigation = PopoverNavigation()
 
     // 메뉴바 캐릭터 애니메이션 — 단일 타이머로 프레임 순환.
@@ -89,6 +90,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             onOpenPopover: { [weak self] in self?.openPopover() },
             onHide: { [weak self] in self?.store.floatingPetEnabled = false }
         )   // 데스크톱 플로팅 펫(옵트인)
+        // 성격에 맞는 농담. 두 store 를 다 보는 자리가 여기뿐이라 여기서 엮는다.
+        // 말풍선을 끈 상태에서는 context 가 nil 이라 생성도 표시도 하지 않는다.
+        jokes = JokeWatcher(
+            context: { [weak self] in
+                guard let self, store.jokeBubbles, store.floatingPetEnabled,
+                      store.floatingPetBubbleAlerts,
+                      let nature = companion.currentNature else { return nil }
+                let speciesID = companion.currentSpeciesID
+                return JokeWatcher.Context(
+                    nature: nature, language: companion.language,
+                    petName: companion.displayName, speciesID: speciesID,
+                    types: speciesID.flatMap { companion.pokemonDetailsByID[$0]?.types } ?? [])
+            },
+            interval: { [weak self] in self?.store.jokeInterval ?? 120 },
+            onJoke: { [weak self] context, joke in
+                self?.store.presentIdleBubble(
+                    .init(title: context.petName, body: joke, palette: .joke,
+                          header: self?.companion.petHeader))
+            })
+        jokes.start()
+
         Task { await updater.check() }                    // 기동 시 1회 업데이트 확인
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)

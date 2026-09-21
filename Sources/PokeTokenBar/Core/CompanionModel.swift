@@ -388,6 +388,18 @@ struct EvoLine: Sendable {
 }
 
 /// 성격 — 본가 25종. 부화 시 확정, 능력치 영향 없음(개체 아이덴티티 표시용).
+/// 펫을 한 줄로 소개하는 머리. 팝오버 헤더, 호버 툴팁, 펫이 말하는 말풍선이 같은 값을 쓴다.
+struct PetHeader: Equatable {
+    let name: String
+    /// 배지 색을 정한다.
+    let rarity: Rarity?
+    /// 배지에 쓸 현지화된 등급 이름. 뷰가 언어를 다시 해석하지 않게 만들 때 넣어둔다.
+    let rarityText: String?
+    let isShiny: Bool
+    /// `진화 단계 1 / 2 · 노력` 처럼 단계와 성격을 합친 줄. 알 상태면 비어 있다.
+    let subtitle: String
+}
+
 enum PokemonNature: String, Codable, Sendable, CaseIterable {
     case hardy, lonely, brave, adamant, naughty
     case bold, docile, relaxed, impish, lax

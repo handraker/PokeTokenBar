@@ -51,6 +51,10 @@ struct L {
     var peakDay: String { t("최다", "Peak", "最多", "Máx.", "Max.", "Máx.", "Max.") }
 
     // MARK: 한도 섹션
+    /// 호버 툴팁의 제목 — 한도와 경험치를 함께 보여주는 자리다.
+    var statusTitle: String { t("스테이터스", "Status", "ステータス", "Estado", "Statut", "Status", "Status") }
+    /// 호버 툴팁의 경험치 줄. 본가 표기를 따른다.
+    var expLabel: String { t("경험치", "EXP", "経験値", "EXP", "EXP", "EXP", "EP") }
     var limitsOfficial: String { t("한도 (공식)", "Limits (official)", "上限（公式）", "Límites (oficial)", "Limites (officiel)", "Limites (oficiais)", "Limits (offiziell)") }
     var fiveHourNotStarted: String { t("다음 메시지부터 시작", "Starts with your next message", "次のメッセージから開始", "Empieza con tu próximo mensaje", "Démarre au prochain message", "Começa na próxima mensagem", "Beginnt mit der nächsten Nachricht") }
     var fiveHourSession: String { t("5시간 세션", "5-hour session", "5時間セッション", "Sesión de 5 horas", "Session de 5 h", "Sessão de 5 horas", "5-Stunden-Sitzung") }
@@ -351,6 +355,18 @@ struct L {
           "Masquer le compagnon flottant", "Ocultar mascote flutuante", "Schwebendes Pokémon ausblenden")
     }
     /// 지금은 한도 알림만 말풍선으로 뜨지만, 알림 종류가 늘어도 이 라벨은 그대로 쓴다.
+    var jokeBubblesLabel: String { t("성격에 맞는 농담", "Personality jokes", "性格に合わせたジョーク", "Bromas según el carácter", "Blagues selon le caractère", "Piadas conforme o feitio", "Wesensgerechte Witze") }
+    var jokeBubblesHint: String {
+        t("포켓몬 성격에 맞는 농담을 말풍선으로 띄웁니다. 문장은 claude CLI 로 만들어 저장해 둡니다.",
+          "Shows jokes that match your Pokémon's nature. Lines are generated with the claude CLI and cached.",
+          "ポケモンの性格に合ったジョークを吹き出しで表示します。文章は claude CLI で生成して保存します。",
+          "Muestra bromas acordes al carácter de tu Pokémon. Las frases se generan con la CLI de claude y se guardan.",
+          "Affiche des blagues adaptées au caractère de votre Pokémon. Les phrases sont générées avec la CLI claude puis mises en cache.",
+          "Mostra piadas conforme o feitio do seu Pokémon. As frases são geradas pela CLI do claude e guardadas.",
+          "Zeigt Witze passend zum Wesen deines Pokémon. Die Sätze erzeugt die claude-CLI und speichert sie zwischen.")
+    }
+    var jokeIntervalLabel: String { t("농담 주기", "Joke interval", "ジョークの間隔", "Intervalo de bromas", "Intervalle des blagues", "Intervalo das piadas", "Witz-Intervall") }
+    var secondsUnit: String { t("초", "sec", "秒", "s", "s", "s", "Sek.") }
     var floatingPetBubbleAlertsLabel: String {
         t("말풍선으로 알림 받기", "Show notifications as bubbles", "通知を吹き出しで表示", "Mostrar notificaciones como globos", "Afficher les notifications en bulles", "Mostrar notificações em balões", "Benachrichtigungen als Sprechblasen anzeigen")
     }

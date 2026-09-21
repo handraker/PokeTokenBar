@@ -286,10 +286,10 @@ final class FloatingPetEnergyTests: XCTestCase {
     /// Bubble needs headroom + width beyond the square pet size — otherwise content is clipped.
     func testPanelGrowsForBubbleWithoutChangingPetOrigin() {
         let pet: CGFloat = 96
-        let idle = FloatingPetController.panelSize(petSize: pet, showingBubble: false)
+        let idle = FloatingPetController.panelSize(petSize: pet, headroom: 0)
         XCTAssertEqual(idle, NSSize(width: pet, height: pet))
 
-        let shown = FloatingPetController.panelSize(petSize: pet, showingBubble: true)
+        let shown = FloatingPetController.panelSize(petSize: pet, headroom: FloatingPetController.bubbleHeadroom)
         XCTAssertGreaterThan(shown.height, pet, "must reserve vertical headroom for the bubble")
         XCTAssertGreaterThanOrEqual(shown.width, pet)
 
@@ -297,9 +297,11 @@ final class FloatingPetEnergyTests: XCTestCase {
         // panel width, not the bubble column. Only 184/192 reached it before the slider max
         // went to 384, so it was an untested 2-step edge; now it is most of the range.
         let large: CGFloat = 384
-        let largeShown = FloatingPetController.panelSize(petSize: large, showingBubble: true)
+        let largeShown = FloatingPetController.panelSize(petSize: large, headroom: FloatingPetController.bubbleHeadroom)
         XCTAssertEqual(largeShown.width, large, "panel must widen with the pet past bubbleMinWidth")
-        XCTAssertEqual(largeShown.height, large + FloatingPetController.bubbleHeadroom)
+        XCTAssertEqual(largeShown.height,
+                       large + FloatingPetController.bubbleHeadroom
+                           + FloatingPetController.bubbleShadowMargin)
 
         let petOrigin = NSPoint(x: 400, y: 200)
         let panelOrigin = FloatingPetController.panelOrigin(
@@ -323,16 +325,53 @@ final class FloatingPetEnergyTests: XCTestCase {
     /// Remaining mode inverts the % and adds the self-describing suffix.
     func testHoverTooltipBuilder() {
         let l = L(.en)
+        func rows(_ session: Double?, _ weekly: Double?, _ modelWeekly: Double?,
+                  _ experience: Double? = nil) -> [FloatingPetView.LimitRow] {
+            FloatingPetView.hoverLimitRows(
+                sessionPercent: session, weeklyPercent: weekly, modelWeeklyPercent: modelWeekly,
+                modelName: "Fable", experiencePercent: experience, l: l)
+        }
+        func tooltip(_ session: Double?, _ weekly: Double?, _ modelWeekly: Double?,
+                     _ mode: UsageStore.LimitDisplayMode = .used) -> UsageStore.BubbleContent {
+            FloatingPetView.hoverTooltip(rows: rows(session, weekly, modelWeekly),
+                                         todayTokens: 12_345, mode: mode, l: l)
+        }
+        // 줄 목록은 막대와 글자판이 함께 쓰는 원본이다 — 사용률을 변환하지 않고 그대로 담는다.
+        XCTAssertEqual(rows(41, 33, 12).map(\.label), [l.fiveHourSession, l.weekly, "Fable \(l.weekly)"])
+        XCTAssertEqual(rows(41, 33, 12).map(\.percent), [41, 33, 12])
+        XCTAssertEqual(rows(nil, nil, nil), [])
+        // 경험치는 펫 자신의 값이라 한도 아래에 붙고, used/remaining 뒤집기를 따르지 않는다.
+        let withExp = rows(41, nil, nil, 62)
+        XCTAssertEqual(withExp.last?.label, l.expLabel)
+        XCTAssertEqual(withExp.last?.kind, .experience)
+        XCTAssertEqual(withExp.first?.kind, .limit)
+        // 제목은 한도, 본문은 세션·주간·모델별 주간 순서로 값마다 한 줄.
+        let full = tooltip(41, 33, 12)
+        XCTAssertEqual(full.title, l.statusTitle)
+        XCTAssertEqual(full.body, [
+            "\(l.fiveHourSession) \(TokenFormatter.percent(41))",
+            "\(l.weekly) \(TokenFormatter.percent(33))",
+            "Fable \(l.weekly) \(TokenFormatter.percent(12))",
+        ].joined(separator: "\n"))
+        // 없는 값의 줄은 빼고 순서는 유지한다. 빈 자리를 0% 로 채우지 않는다.
+        XCTAssertEqual(tooltip(nil, 33, nil).body, "\(l.weekly) \(TokenFormatter.percent(33))")
+        XCTAssertEqual(tooltip(41, nil, 12).body, [
+            "\(l.fiveHourSession) \(TokenFormatter.percent(41))",
+            "Fable \(l.weekly) \(TokenFormatter.percent(12))",
+        ].joined(separator: "\n"))
+        // remaining 모드는 %를 뒤집고 자기설명 접미사를 붙인다.
         XCTAssertEqual(
-            FloatingPetView.hoverTooltip(todayTokens: 12_345, limitUtilization: nil, mode: .used, l: l),
-            l.floatingPetHoverTokensOnly(TokenFormatter.grouped(12_345)))
+            tooltip(41, nil, nil, .remaining).body,
+            "\(l.fiveHourSession) \(l.percentRemaining(TokenFormatter.percent(59)))")
+        // remaining 모드에서도 경험치는 쌓인 양 그대로다. 뒤집으면 "38% 남음"이 되어 뜻이 바뀐다.
         XCTAssertEqual(
-            FloatingPetView.hoverTooltip(todayTokens: 12_345, limitUtilization: 42, mode: .used, l: l),
-            l.floatingPetHoverWithLimit(TokenFormatter.grouped(12_345), TokenFormatter.percent(42)))
-        XCTAssertEqual(
-            FloatingPetView.hoverTooltip(todayTokens: 12_345, limitUtilization: 42, mode: .remaining, l: l),
-            l.floatingPetHoverWithLimit(TokenFormatter.grouped(12_345),
-                                        l.percentRemaining(TokenFormatter.percent(58))))
+            FloatingPetView.hoverTooltip(rows: rows(nil, nil, nil, 62), todayTokens: 0,
+                                         mode: .remaining, l: l).body,
+            "\(l.expLabel) \(TokenFormatter.percent(62))")
+        // 한도를 아직 못 받았으면 빈 툴팁 대신 오늘 토큰으로 되돌아간다.
+        let empty = tooltip(nil, nil, nil)
+        XCTAssertEqual(empty.title, l.floatingPetHoverTokensOnly(TokenFormatter.grouped(12_345)))
+        XCTAssertEqual(empty.body, "")
     }
 
     /// [회귀] 호버 콜아웃의 글자와 외곽선은 같은 appearance에서 해석되어야 한다.
@@ -366,79 +405,91 @@ final class FloatingPetEnergyTests: XCTestCase {
     /// Iterate `allCases`, never a literal list: a hardcoded `[.ko, .en, .ja]` silently stopped
     /// covering Spanish the moment #159 landed, which is exactly when a layout guard matters.
     ///
-    /// The view draws body with `.lineLimit(2)` (#167). An unconstrained height check
-    /// against `bubbleHeadroom` stays green for 3-line copy that still measures ≤70pt
-    /// while the view truncates — so this guard fails on `wouldTruncate`, not only overflow.
-    /// The tautological `measured.width ≤ panel.width` is gone: `measureSpeechBubble`
-    /// clamps width to the column by construction, so that assert could never fail.
+    /// 줄 수 제한을 없앤 뒤로는 "잘리는가"가 아니라 "패널이 그만큼 자라는가"가 지킬 값이다.
+    /// 앱 자신의 한도 문구는 최소 높이 안에 들어와야 한다 — 그보다 크면 짧은 경고에도 패널이
+    /// 커져 pet 이 화면에서 밀린다.
     func testLocalizedAlertBubbleFitsDefaultPanel() {
         let pet: CGFloat = 96
-        let panel = FloatingPetController.panelSize(petSize: pet, showingBubble: true)
-        XCTAssertEqual(panel.width, FloatingPetController.bubbleMinWidth)
-        XCTAssertEqual(panel.height, pet + FloatingPetController.bubbleHeadroom)
+        let panel = FloatingPetController.panelSize(
+            petSize: pet, headroom: FloatingPetController.bubbleHeadroom)
+        // 말풍선 폭에 그림자 여백을 더한 만큼이 패널이다. 딱 맞추면 그림자가 잘린다.
+        XCTAssertEqual(panel.width,
+                       FloatingPetController.bubbleMinWidth
+                           + FloatingPetController.bubbleShadowMargin * 2)
+        XCTAssertEqual(panel.height,
+                       pet + FloatingPetController.bubbleHeadroom
+                           + FloatingPetController.bubbleShadowMargin)
+        XCTAssertGreaterThan(panel.width, FloatingPetController.bubbleMinWidth,
+                             "말풍선이 패널 경계에 닿으면 그림자와 외곽선이 깎인다")
         XCTAssertEqual(
             FloatingPetController.bubbleContentWidth
                 + FloatingPetController.bubbleHorizontalPadding * 2,
             FloatingPetController.bubbleMinWidth,
             "content column + horizontal padding must equal panel width")
-        XCTAssertEqual(
-            FloatingPetController.bubbleBodyLineLimit, 2,
-            "must stay in lockstep with SpeechBubbleView.lineLimit")
 
         for lang in AppLanguage.allCases {
             let l = L(lang)
             for title in [l.notifCritical, l.notifWarning] {
                 for window in Self.alertWindows(l) {
                     let body = l.notifBody(window, TokenFormatter.percent(85))
-                    let layout = FloatingPetController.measureSpeechBubbleLayout(title: title, body: body)
-                    XCTAssertFalse(
-                        layout.wouldTruncate,
-                        "\(lang.rawValue) '\(title)' / '\(body)' wraps to \(layout.bodyLineCount) lines and would truncate at lineLimit(\(FloatingPetController.bubbleBodyLineLimit))")
-                    XCTAssertLessThanOrEqual(
-                        layout.size.height, FloatingPetController.bubbleHeadroom - 2,
-                        "\(lang.rawValue) bubble height \(layout.size.height) must fit headroom \(FloatingPetController.bubbleHeadroom)")
+                    let content = UsageStore.BubbleContent(title: title, body: body)
+                    XCTAssertEqual(
+                        FloatingPetController.headroom(for: content, petSize: pet),
+                        FloatingPetController.bubbleHeadroom,
+                        "\(lang.rawValue) '\(title)' / '\(body)' 가 최소 높이를 넘겼다")
                 }
             }
         }
     }
 
-    /// #167: 3-line copy that still fits the 70pt headroom must fail the guard.
-    /// Height-only would stay green (owner's table: 3-line ≈69pt). Injected independently
-    /// of Localization.swift so a green localized run can't hide a broken truncate check.
-    func testThreeLineBodyThatFitsHeadroomWouldTruncate() {
-        let title = "Límite inminente"
-        let body = Self.bodyWrappingExtraLines(2, title: title)
-        let layout = FloatingPetController.measureSpeechBubbleLayout(title: title, body: body)
-        XCTAssertEqual(layout.bodyLineCount, 3)
-        XCTAssertLessThanOrEqual(
-            layout.size.height, FloatingPetController.bubbleHeadroom - 2,
-            "precondition: 3-line copy still fits the panel — the defect is truncation, not overflow")
-        XCTAssertTrue(
-            layout.wouldTruncate,
-            "view lineLimit(2) truncates this copy; a headroom-only guard would miss it")
+    /// 줄 수를 제한하지 않으므로 긴 알림은 패널이 그만큼 위로 자란다.
+    func testPanelHeadroomFollowsBubbleContent() {
+        let pet: CGFloat = 152
+        let short = UsageStore.BubbleContent(title: "알림", body: "짧은 본문")
+        let long = UsageStore.BubbleContent(
+            title: "알림", body: String(repeating: "긴 본문이 이어진다. ", count: 40))
+        let shortRoom = FloatingPetController.headroom(for: short, petSize: pet)
+        let longRoom = FloatingPetController.headroom(for: long, petSize: pet)
+        XCTAssertEqual(shortRoom, FloatingPetController.bubbleHeadroom, "짧으면 최소 높이 그대로다")
+        XCTAssertGreaterThan(longRoom, shortRoom, "길면 그만큼 자라야 잘리지 않는다")
+        XCTAssertEqual(FloatingPetController.panelSize(petSize: pet, headroom: longRoom).height,
+                       pet + longRoom + FloatingPetController.bubbleShadowMargin)
+        // 말풍선이 없으면 패널은 pet 크기다.
+        XCTAssertEqual(FloatingPetController.headroom(for: nil, petSize: pet), 0)
+        XCTAssertEqual(FloatingPetController.panelSize(petSize: pet, headroom: 0),
+                       NSSize(width: pet, height: pet))
     }
 
-    /// Two-line wrap is the view's designed capacity — must not trip truncation.
-    func testTwoLineBodyDoesNotTruncate() {
-        let title = "Límite inminente"
-        let body = Self.bodyWrappingExtraLines(1, title: title)
-        let layout = FloatingPetController.measureSpeechBubbleLayout(title: title, body: body)
-        XCTAssertEqual(layout.bodyLineCount, 2)
-        XCTAssertFalse(layout.wouldTruncate)
-        XCTAssertLessThanOrEqual(layout.size.height, FloatingPetController.bubbleHeadroom - 2)
+    /// 알림 본문은 길이 제한이 없다. 한 통이 화면보다 길어도 패널은 화면 안에 머물러야 한다.
+    func testHeadroomStopsAtScreenHeight() {
+        let pet: CGFloat = 152
+        let flood = UsageStore.BubbleContent(
+            title: "알림", body: String(repeating: "가", count: 20_000))
+        let room = FloatingPetController.headroom(for: flood, petSize: pet, screenHeight: 900)
+        XCTAssertLessThanOrEqual(room, 900 - pet - FloatingPetController.bubbleShadowMargin)
+        XCTAssertGreaterThan(room, FloatingPetController.bubbleHeadroom)
     }
 
-    /// 4-line copy overflows the panel *and* truncates — the other threshold in the owner's table.
-    func testFourLineBodyExceedsHeadroomAndWouldTruncate() {
-        let title = "Límite inminente"
-        let body = Self.bodyWrappingExtraLines(3, title: title)
-        let layout = FloatingPetController.measureSpeechBubbleLayout(title: title, body: body)
-        XCTAssertEqual(layout.bodyLineCount, 4)
-        XCTAssertTrue(layout.wouldTruncate)
-        XCTAssertGreaterThan(
-            layout.size.height, FloatingPetController.bubbleHeadroom - 2,
-            "4-line unconstrained height must miss the panel so the overflow assert can still fail")
+    /// 말풍선이 사라질 때 패널을 먼저 줄이면 퇴장 애니메이션이 창 밖으로 잘려 뚝 끊겨 보인다.
+    /// 크기가 같을 때 다시 그리라고 시키는 것도 진행 중인 애니메이션을 끊으므로 건너뛴다.
+    func testFrameUpdateDefersShrinkUntilBubbleLeaves() {
+        let small = NSRect(x: 0, y: 0, width: 152, height: 152)
+        let large = NSRect(x: 0, y: 0, width: 180, height: 152 + FloatingPetController.bubbleHeadroom)
+        XCTAssertEqual(
+            FloatingPetController.frameUpdate(current: small, target: large, showingBubble: true), .now)
+        XCTAssertEqual(
+            FloatingPetController.frameUpdate(current: large, target: small, showingBubble: false),
+            .afterBubbleExit)
+        XCTAssertEqual(
+            FloatingPetController.frameUpdate(current: large, target: large, showingBubble: true), .none)
+        XCTAssertEqual(
+            FloatingPetController.frameUpdate(current: small, target: small, showingBubble: false), .none)
     }
+
+
+
+
+
 
     /// Unclamped single-line width must be able to exceed the content column.
     /// `measureSpeechBubble` returns `min(contentWidth, …) + padding` (= panel width),
@@ -455,7 +506,6 @@ final class FloatingPetEnergyTests: XCTestCase {
 
         let short = FloatingPetController.measureSpeechBubbleLayout(title: "Hi", body: "Hi")
         XCTAssertEqual(short.bodyLineCount, 1)
-        XCTAssertFalse(short.wouldTruncate)
         XCTAssertLessThanOrEqual(short.unclampedBodyWidth, FloatingPetController.bubbleContentWidth)
         XCTAssertLessThanOrEqual(short.unclampedTitleWidth, FloatingPetController.bubbleContentWidth)
     }
@@ -484,22 +534,5 @@ final class FloatingPetEnergyTests: XCTestCase {
         return resolved
     }
 
-    /// Grow a wrapping body until unconstrained `measureSpeechBubble` height has jumped
-    /// `extraLines` times past a single line. Independent of `bodyLineCount` so the
-    /// fixture still works if that field is the thing under test.
-    private static func bodyWrappingExtraLines(_ extraLines: Int, title: String) -> String {
-        var text = "word"
-        var lastHeight = FloatingPetController.measureSpeechBubble(title: title, body: text).height
-        var jumps = 0
-        for _ in 0..<400 {
-            text += " word"
-            let height = FloatingPetController.measureSpeechBubble(title: title, body: text).height
-            if height > lastHeight + 2 {
-                jumps += 1
-                lastHeight = height
-                if jumps == extraLines { return text }
-            }
-        }
-        return text
-    }
+
 }

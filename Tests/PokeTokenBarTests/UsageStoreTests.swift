@@ -290,6 +290,23 @@ final class UsageStoreTests: XCTestCase {
         XCTAssertEqual(UsageStore.bubbleAlert(from: [critLow, warnHigh, critHigh]), critHigh)
     }
 
+    /// Limit alert → bubble text mapping is pure: severity picks the headline and the red tint,
+    /// and the body carries the window name + percent (the view only draws what this returns).
+    func testBubbleContentMapsSeverityAndBody() {
+        let l = L(.ko)
+        let warn = UsageStore.bubbleContent(
+            for: UsageStore.LimitAlert(key: "a", window: "주간", isCritical: false, utilization: 81), l: l)
+        XCTAssertEqual(warn.title, l.notifWarning)
+        XCTAssertEqual(warn.body, l.notifBody("주간", TokenFormatter.percent(81)))
+        XCTAssertFalse(warn.isCritical)
+
+        let crit = UsageStore.bubbleContent(
+            for: UsageStore.LimitAlert(key: "b", window: "5시간", isCritical: true, utilization: 96), l: l)
+        XCTAssertEqual(crit.title, l.notifCritical)
+        XCTAssertTrue(crit.isCritical)
+        XCTAssertNotEqual(crit.title, warn.title)
+    }
+
     /// 6s auto-dismiss is a pure time check — testable without AppKit / Task.sleep.
     func testBubbleDismissUsesTTL() {
         let shown = Date(timeIntervalSince1970: 1_000)

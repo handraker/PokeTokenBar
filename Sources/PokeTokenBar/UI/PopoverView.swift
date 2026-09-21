@@ -980,9 +980,7 @@ struct PopoverView: View {
     }()
 
     private func limitColor(_ utilization: Double) -> Color {
-        if utilization >= store.critThreshold { return .red }
-        if utilization >= store.warnThreshold { return .orange }
-        return .green
+        LimitProgressBar.tint(utilization, store: store)
     }
 
     // MARK: 푸터
@@ -1315,10 +1313,19 @@ private extension View {
 /// Text and fill describe the same quantity; warning colors still represent actual usage.
 @MainActor
 struct LimitProgressBar: View {
+    /// 경고색 규칙. 임계값이 사용자 설정이라 막대를 그리는 화면마다 다시 쓰면 드리프트가 생긴다.
+    static func tint(_ utilization: Double, store: UsageStore) -> Color {
+        if utilization >= store.critThreshold { return .red }
+        if utilization >= store.warnThreshold { return .orange }
+        return .green
+    }
+
     let usedPercent: Double
     let tint: Color
     /// 창이 지난 비율(0…1) — 균등하게 썼다면 채움이 여기 있어야 한다. nil 이면 마커 없음.
     var pace: Double?
+    /// 한도 막대는 used/remaining 설정을 따르지만 경험치는 늘 쌓인 양을 보여준다.
+    var followsDisplayMode = true
     @Environment(UsageStore.self) private var store
 
     /// 마커 가로 위치(0…1). 채움과 **같은 변환**(`displayPercent`)을 거치게 해서, 잔량 모드에서
@@ -1329,7 +1336,8 @@ struct LimitProgressBar: View {
     }
 
     var body: some View {
-        ProgressView(value: min(100, max(0, store.limitDisplayPercent(usedPercent))), total: 100)
+        let shown = followsDisplayMode ? store.limitDisplayPercent(usedPercent) : usedPercent
+        ProgressView(value: min(100, max(0, shown)), total: 100)
             .tint(tint)
             .controlSize(.small)
             .overlay { paceMarker }
