@@ -663,6 +663,10 @@ private struct HoverCalloutContent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             PetHeaderView(header: header)
+            // 홈 화면과 같은 타입 배지. 말풍선은 짧게 두려고 툴팁에만 붙인다.
+            if !header.types.isEmpty {
+                TypeBadges(types: header.types, language: l.lang)
+            }
             // 한도를 아직 못 받았으면 줄이 없다. 그 자리에 오늘 토큰을 대신 보여준다.
             if rows.isEmpty {
                 Text(content.title)

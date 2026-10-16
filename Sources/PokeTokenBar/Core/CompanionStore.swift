@@ -265,6 +265,7 @@ final class CompanionStore {
         return PetHeader(name: displayName, rarity: rarity,
                          rarityText: rarity.map { l.rarityLabel($0) }, isShiny: currentIsShiny,
                          duplicateText: duplicate,
+                         types: hasActive ? currentSpeciesID.flatMap { pokemonDetailsByID[$0]?.types } ?? [] : [],
                          subtitle: hasActive ? stageText + nature : "")
     }
     var isFinalStage: Bool {

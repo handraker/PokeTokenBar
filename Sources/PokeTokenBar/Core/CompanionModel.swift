@@ -402,6 +402,8 @@ struct PetHeader: Equatable {
     let isShiny: Bool
     /// 이미 졸업한 계열이 또 부화했을 때 이름 옆에 붙일 말. 중복이 아니면 nil 이다.
     let duplicateText: String?
+    /// 타입 API 이름(`poison` 등). 상세 정보를 아직 못 받았거나 알 상태면 비어 있다.
+    var types: [String] = []
     /// `진화 단계 1 / 2 · 노력` 처럼 단계와 성격을 합친 줄. 알 상태면 비어 있다.
     let subtitle: String
 }
