@@ -340,6 +340,12 @@ final class FloatingPetEnergyTests: XCTestCase {
         XCTAssertEqual(rows(41, 33, 12).map(\.label), [l.fiveHourSession, l.weekly, "Fable \(l.weekly)"])
         XCTAssertEqual(rows(41, 33, 12).map(\.percent), [41, 33, 12])
         XCTAssertEqual(rows(nil, nil, nil), [])
+        // 만료 눈금은 줄마다 제 값이 실리고, 경험치 줄에는 눈금이 없다.
+        let paced = FloatingPetView.hoverLimitRows(
+            sessionPercent: 41, sessionPace: 0.3, weeklyPercent: 33, weeklyPace: 0.6,
+            modelWeeklyPercent: 12, modelWeeklyPace: 0.7,
+            modelName: "Fable", experiencePercent: 62, l: l)
+        XCTAssertEqual(paced.map(\.pace), [0.3, 0.6, 0.7, nil])
         // 경험치는 펫 자신의 값이라 한도 아래에 붙고, used/remaining 뒤집기를 따르지 않는다.
         let withExp = rows(41, nil, nil, 62)
         XCTAssertEqual(withExp.last?.label, l.expLabel)

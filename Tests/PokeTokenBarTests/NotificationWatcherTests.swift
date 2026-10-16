@@ -162,3 +162,22 @@ final class JokeWatcherTests: XCTestCase {
         XCTAssertEqual(JokeWatcher.repertoireTarget(perHour: 3600), JokeWatcher.repertoireRange.upperBound)
     }
 }
+
+// 중복 표시는 성장 2배와 같은 신호(이미 졸업한 계열)를 쓴다. 둘이 어긋나면 표시가 거짓말이 된다.
+@MainActor
+final class PetHeaderDuplicateTests: XCTestCase {
+    func testDuplicateTextAppearsOnlyForCollectedLines() throws {
+        let suite = "PetHeaderDuplicate-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        // 세이브 경로를 반드시 임시 파일로 준다 — 기본값은 사용자의 실제 상태 파일이다.
+        let save = FileManager.default.temporaryDirectory
+            .appendingPathComponent("companion-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: save) }
+        let companion = CompanionStore(fileURL: save, defaults: defaults)
+
+        // 알 상태에는 활성 개체가 없어 중복도 없다. 성장 배수와 같은 신호를 봐야 둘이 안 어긋난다.
+        XCTAssertNil(companion.petHeader.duplicateText)
+        XCTAssertNil(companion.growthMultiplier)
+    }
+}

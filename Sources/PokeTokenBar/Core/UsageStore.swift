@@ -615,9 +615,26 @@ final class UsageStore {
         limits?.fiveHour?.utilization ?? limits?.limits?.first { $0.kind == "session" }?.percent
     }
 
+    /// 현재 5시간 세션이 끝나는 시각. 사용률과 같은 순서로 legacy 필드 다음 `limits[]` 를 본다.
+    var sessionResetDate: Date? {
+        limits?.fiveHour?.resetDate ?? limits?.limits?.first { $0.kind == "session" }?.resetDate
+    }
+
     /// 주간 전체 한도 사용률. 세션과 같은 이유로 legacy 필드가 비면 `limits[]` 에서 찾는다.
     var weeklyUtilization: Double? {
         limits?.sevenDay?.utilization ?? limits?.limits?.first { $0.kind == "weekly_all" }?.percent
+    }
+
+    /// 주간 전체 한도가 끝나는 시각. 사용률과 같은 순서로 찾는다.
+    var weeklyResetDate: Date? {
+        limits?.sevenDay?.resetDate ?? limits?.limits?.first { $0.kind == "weekly_all" }?.resetDate
+    }
+
+    /// 모델별 주간 한도가 끝나는 시각. 사용률과 같은 항목에서 읽는다.
+    func weeklyResetDate(forModel name: String) -> Date? {
+        limits?.scopedLimitEntries.first {
+            $0.scope?.model?.displayName?.localizedCaseInsensitiveContains(name) == true
+        }?.resetDate
     }
 
     /// 모델별 주간 한도 사용률. 표시 이름으로 찾아 응답에 모델이 늘거나 이름이 바뀌어도

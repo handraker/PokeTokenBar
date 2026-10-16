@@ -400,6 +400,8 @@ struct PetHeader: Equatable {
     /// 배지에 쓸 현지화된 등급 이름. 뷰가 언어를 다시 해석하지 않게 만들 때 넣어둔다.
     let rarityText: String?
     let isShiny: Bool
+    /// 이미 졸업한 계열이 또 부화했을 때 이름 옆에 붙일 말. 중복이 아니면 nil 이다.
+    let duplicateText: String?
     /// `진화 단계 1 / 2 · 노력` 처럼 단계와 성격을 합친 줄. 알 상태면 비어 있다.
     let subtitle: String
 }

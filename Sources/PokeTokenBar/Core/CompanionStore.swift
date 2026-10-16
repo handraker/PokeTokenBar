@@ -260,8 +260,11 @@ final class CompanionStore {
     /// 이름·등급·단계·성격을 한 줄 머리로 묶는다. 화면마다 다시 조립하면 표기가 갈린다.
     var petHeader: PetHeader {
         let nature = currentNature.map { " · \($0.name(language))" } ?? ""
+        // 중복 판정은 성장 2배와 같은 신호를 쓴다 — 이미 졸업한 계열이 또 부화한 경우다.
+        let duplicate = state.active?.hasGrowthBoost == true ? l.duplicateMark : nil
         return PetHeader(name: displayName, rarity: rarity,
                          rarityText: rarity.map { l.rarityLabel($0) }, isShiny: currentIsShiny,
+                         duplicateText: duplicate,
                          subtitle: hasActive ? stageText + nature : "")
     }
     var isFinalStage: Bool {

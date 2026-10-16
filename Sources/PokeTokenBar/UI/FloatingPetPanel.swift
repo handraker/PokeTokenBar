@@ -328,11 +328,20 @@ final class FloatingPetController: NSObject, NSWindowDelegate {
         builtAnimated = nil
     }
 
+    /// 툴팁 막대의 만료 눈금 위치. 팝오버와 같은 계산이라 두 화면의 눈금이 같은 자리에 선다.
+    private static func pace(resetsAt: Date?, span: TimeInterval) -> Double? {
+        resetsAt.flatMap { UsageStore.paceFraction(resetsAt: $0, span: span, now: Date()) }
+    }
+
     private func currentHoverRows() -> [FloatingPetView.LimitRow] {
         FloatingPetView.hoverLimitRows(
             sessionPercent: store.sessionUtilization,
+            sessionPace: Self.pace(resetsAt: store.sessionResetDate, span: LimitWindowSpan.fiveHour),
             weeklyPercent: store.weeklyUtilization,
+            weeklyPace: Self.pace(resetsAt: store.weeklyResetDate, span: LimitWindowSpan.sevenDay),
             modelWeeklyPercent: store.weeklyUtilization(forModel: Self.hoverModelName),
+            modelWeeklyPace: Self.pace(resetsAt: store.weeklyResetDate(forModel: Self.hoverModelName),
+                                       span: LimitWindowSpan.sevenDay),
             modelName: Self.hoverModelName,
             // 알 상태에는 경험치 막대가 없다. 부화 진행은 팝오버가 따로 보여준다.
             experiencePercent: companion.isEgg ? nil : companion.progress * 100,
@@ -586,19 +595,28 @@ struct FloatingPetView: View {
         let label: String
         let percent: Double
         var kind: Kind = .limit
+        /// 창이 지난 비율(0…1). 막대에 세션이 끝나는 쪽을 가늠할 눈금을 그린다. nil 이면 눈금 없음.
+        var pace: Double?
         var id: String { label }
     }
 
     /// 툴팁에 올릴 한도 줄들: 5시간 세션, 주간, 모델별 주간 순서. 값이 없는 줄은 빼고
     /// 순서는 유지한다 — 빈 자리를 0% 로 채우지 않는다.
-    static func hoverLimitRows(sessionPercent: Double?, weeklyPercent: Double?,
-                               modelWeeklyPercent: Double?, modelName: String,
+    static func hoverLimitRows(sessionPercent: Double?, sessionPace: Double? = nil,
+                               weeklyPercent: Double?, weeklyPace: Double? = nil,
+                               modelWeeklyPercent: Double?, modelWeeklyPace: Double? = nil,
+                               modelName: String,
                                experiencePercent: Double?, l: L) -> [LimitRow] {
         var rows: [LimitRow] = []
-        if let sessionPercent { rows.append(LimitRow(label: l.fiveHourSession, percent: sessionPercent)) }
-        if let weeklyPercent { rows.append(LimitRow(label: l.weekly, percent: weeklyPercent)) }
+        if let sessionPercent {
+            rows.append(LimitRow(label: l.fiveHourSession, percent: sessionPercent, pace: sessionPace))
+        }
+        if let weeklyPercent {
+            rows.append(LimitRow(label: l.weekly, percent: weeklyPercent, pace: weeklyPace))
+        }
         if let modelWeeklyPercent {
-            rows.append(LimitRow(label: "\(modelName) \(l.weekly)", percent: modelWeeklyPercent))
+            rows.append(LimitRow(label: "\(modelName) \(l.weekly)", percent: modelWeeklyPercent,
+                                 pace: modelWeeklyPace))
         }
         // 경험치는 한도가 아니라 펫 자신의 값이라 맨 아래에 둔다.
         if let experiencePercent {
@@ -665,7 +683,8 @@ private struct HoverCalloutContent: View {
                         Text(row.label)
                         StatusBar(percent: isLimit ? store.limitDisplayPercent(row.percent)
                                                    : row.percent,
-                                  tint: tint)
+                                  tint: tint,
+                                  marker: LimitProgressBar.markerFraction(pace: row.pace, mode: mode))
                         Text(value).monospacedDigit().gridColumnAlignment(.trailing)
                     }
                 }
@@ -689,6 +708,10 @@ private struct PetHeaderView: View {
                     .font(.system(size: FloatingPetController.bubbleTitleFontSize, weight: .bold))
                     .foregroundColor(titleColor)
                 if header.isShiny { Text("✨").font(.system(size: 10)) }
+                if let duplicate = header.duplicateText {
+                    Text("(\(duplicate))")
+                        .font(.caption2).foregroundColor(subtitleColor)
+                }
                 if let rarity = header.rarity, let label = header.rarityText {
                     Text(label.uppercased())
                         .font(.system(size: 8, weight: .bold))
@@ -711,6 +734,8 @@ private struct StatusBar: View {
     /// 0 부터 100 까지. 표시 모드 변환은 부르는 쪽이 끝내고 넘긴다.
     let percent: Double
     let tint: Color
+    /// 세로 눈금의 가로 위치(0…1). 팝오버 `LimitProgressBar` 와 같은 모양으로 그린다.
+    var marker: Double?
 
     var body: some View {
         let filled = Self.size.width * min(1, max(0, percent / 100))
@@ -718,6 +743,12 @@ private struct StatusBar: View {
             Capsule().fill(Color.primary.opacity(0.15))
                 .frame(width: Self.size.width, height: Self.size.height)
             Capsule().fill(tint).frame(width: filled, height: Self.size.height)
+            if let marker {
+                RoundedRectangle(cornerRadius: 1.25, style: .continuous)
+                    .fill(Color.primary.opacity(0.55))
+                    .frame(width: 2.5, height: Self.size.height + 4)
+                    .offset(x: (Self.size.width - 2.5) * marker)
+            }
         }
     }
 }

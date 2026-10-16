@@ -1071,6 +1071,8 @@ struct L {
     }
     func toNextEvolution(_ amount: String) -> String { t("다음 진화까지 \(amount)", "\(amount) to next evolution", "次の進化まで \(amount)", "\(amount) para la siguiente evolución", "\(amount) avant la prochaine évolution", "\(amount) para a próxima evolução", "\(amount) bis zur nächsten Entwicklung", "Ещё \(amount) до следующей эволюции") }
     func toGraduation(_ amount: String) -> String { t("졸업까지 \(amount)", "\(amount) to graduation", "卒業まで \(amount)", "\(amount) para graduarse", "\(amount) avant le diplôme", "\(amount) para se formar", "\(amount) bis zum Abschied", "Ещё \(amount) до выпуска") }
+    /// 이미 졸업한 계열이 또 부화했을 때 이름 옆에 붙이는 표시.
+    var duplicateMark: String { t("중복", "Duplicate", "重複", "Duplicado", "Doublon", "Duplicado", "Doppelt", "Дубликат") }
     func growthBoost(_ multiplier: Int) -> String { t("\(multiplier)× 성장", "\(multiplier)× growth", "成長 \(multiplier)倍", "Crecimiento ×\(multiplier)", "Croissance ×\(multiplier)", "Crescimento ×\(multiplier)", "\(multiplier)× Wachstum", "Рост ×\(multiplier)") }
     func graduated(_ name: String) -> String {
         t("\(name) 졸업 → 도감에 보존. 새 Token Egg가 도착했어요!",
